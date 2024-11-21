@@ -1,0 +1,93 @@
+<!-- static/login.html -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Login</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        /* Custom styles for the login form */
+        body {
+            background-color: #e9ecef;
+        }
+        .login-container {
+            max-width: 400px;
+            margin: 80px auto;
+            padding: 30px;
+            background-color: #ffffff;
+            border-radius: 10px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+        #message {
+            margin-top: 15px;
+            text-align: center;
+        }
+    </style>
+</head>
+<body>
+<div class="container">
+    <div class="login-container">
+        <h2 class="text-center mb-4">Login</h2>
+        <form id="login-form">
+            <div class="mb-3">
+                <label for="username" class="form-label">Username</label>
+                <input type="text" class="form-control" id="username" name="username" required placeholder="Enter your username">
+            </div>
+            <div class="mb-3">
+                <label for="password" class="form-label">Password</label>
+                <input type="password" class="form-control" id="password" name="password" required placeholder="Enter your password">
+            </div>
+            <button type="submit" class="btn btn-primary w-100">Login</button>
+        </form>
+        <p id="message"></p>
+        <p class="text-center mt-3">Don't have an account? <a href="/register.html">Register here</a>.</p>
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+    const form = document.getElementById('login-form');
+    const messageEl = document.getElementById('message');
+
+    form.addEventListener('submit', async (e) => {
+        e.preventDefault();
+
+        const formData = new FormData(form);
+        const data = {
+            username: formData.get('username').trim(),
+            password: formData.get('password').trim()
+        };
+
+        // Basic frontend validation
+        if (data.username.length < 3) {
+            messageEl.innerHTML = '<div class="alert alert-warning" role="alert">Username must be at least 3 characters long.</div>';
+            return;
+        }
+
+        if (data.password.length < 6) {
+            messageEl.innerHTML = '<div class="alert alert-warning" role="alert">Password must be at least 6 characters long.</div>';
+            return;
+        }
+
+        try {
+            const response = await fetch('/login', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify(data)
+            });
+
+            const result = await response.json();
+
+            if (response.ok) {
+                window.location.href = '/chat.html';
+            } else {
+                messageEl.innerHTML = '<div class="alert alert-danger" role="alert">' + result.message + '</div>';
+            }
+        } catch (error) {
+            console.error('Fetch error:', error);
+            messageEl.innerHTML = '<div class="alert alert-danger" role="alert">An error occurred. Please try again later.</div>';
+        }
+    });
+</script>
+</body>
+</html>

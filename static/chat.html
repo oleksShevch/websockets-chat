@@ -1,0 +1,262 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Rust WebSocket Chat</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #f2f2f2;
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+            margin: 0;
+        }
+
+        #chat {
+            flex: 1;
+            padding: 20px;
+            overflow-y: scroll;
+            background-color: #fff;
+        }
+
+        #message-form {
+            display: flex;
+            padding: 10px;
+            background-color: #ddd;
+        }
+
+        #message-input {
+            flex: 1;
+            padding: 10px;
+            font-size: 16px;
+        }
+
+        #send-button {
+            padding: 10px 20px;
+            font-size: 16px;
+            margin-left: 10px;
+            cursor: pointer;
+        }
+
+        .message {
+            display: flex;
+            margin-bottom: 10px;
+            padding: 0 10px;
+        }
+
+        .message.self {
+            justify-content: flex-end;
+        }
+
+        .message.peer {
+            justify-content: flex-start;
+        }
+
+        .message.system {
+            justify-content: center;
+        }
+
+        .message-content {
+            max-width: 60%;
+            padding: 10px;
+            border-radius: 15px;
+            word-wrap: break-word;
+            font-size: 16px;
+        }
+
+        .self-bubble {
+            background-color: #dcf8c6; /* Light green for self messages */
+            color: #000;
+            box-shadow: 0 1px 2px rgba(0,0,0,0.1);
+        }
+
+        .peer-bubble {
+            background-color: #fff; /* White for peer messages */
+            color: #000;
+            border: 1px solid #ccc;
+            box-shadow: 0 1px 2px rgba(0,0,0,0.1);
+        }
+
+        .system-message {
+            background-color: transparent;
+            color: gray;
+            font-style: italic;
+        }
+
+    </style>
+</head>
+<body>
+<div id="chat"></div>
+<!--<form id="message-form">-->
+<!--    <input type="text" id="message-input" autocomplete="off" placeholder="Type your message here..." required />-->
+<!--    <button type="submit" id="send-button">Send</button>-->
+<!--</form>-->
+<form id="message-form">
+    <input type="text" id="message-input" autocomplete="off" placeholder="Type your message here..." />
+    <input type="file" id="file-input" style="display: none;" />
+    <button type="submit" id="send-button">Send</button>
+    <button type="button" id="send-file-button">Send File</button>
+</form>
+
+
+
+<script>
+    const chat = document.getElementById('chat');
+    const form = document.getElementById('message-form');
+    const input = document.getElementById('message-input');
+    const fileInput = document.getElementById('file-input');
+    const sendFileButton = document.getElementById('send-file-button');
+
+    let my_username = null;
+
+    const wsProtocol = window.location.protocol === 'https:' ? 'wss' : 'ws';
+    const ws = new WebSocket(`${wsProtocol}://${window.location.host}/ws`);
+
+
+    sendFileButton.addEventListener('click', () => {
+        fileInput.click();
+    });
+
+    fileInput.addEventListener('change', () => {
+        const file = fileInput.files[0];
+        if (file) {
+            const reader = new FileReader();
+            reader.onload = () => {
+                // Send the file data via WebSocket
+                const base64Data = reader.result.split(',')[1];
+                const fileMessage = {
+                    message_type: 'File',
+                    content: base64Data,
+                    sender_username: my_username,
+                    filename: file.name,
+                };
+                ws.send(JSON.stringify(fileMessage));
+            };
+            reader.readAsDataURL(file);
+        }
+    });
+
+
+    ws.onopen = () => {
+        appendMessage('Connected to the chat server.', 'system');
+    };
+
+    ws.onmessage = (event) => {
+        try {
+            const data = JSON.parse(event.data);
+            console.log(data);
+
+            if (data.message_type === 'Init') {
+                // Set my_username from the init message
+                my_username = data.sender_username;
+            } else if (data.message_type === 'System') {
+                appendMessage(data.content, 'system');
+            } else if (data.message_type === 'User') {
+                const senderUsername = data.sender_username;
+                const content = data.content;
+                if (senderUsername === my_username) {
+                    appendMessage(`You: ${content}`, 'self');
+                } else {
+                    appendMessage(`${senderUsername}: ${content}`, 'peer');
+                }
+            } else if (data.message_type === 'File') {
+                // Handle file message
+                const senderUsername = data.sender_username;
+                const filename = data.filename;
+                const fileId = data.file_id;
+
+                appendFileMessage(senderUsername, filename, fileId, senderUsername === my_username ? 'self' : 'peer');
+            } else {
+                appendMessage(event.data, 'system');
+            }
+        } catch (e) {
+            console.error('Error parsing message:', e);
+            appendMessage(event.data, 'system');
+        }
+    };
+
+
+    ws.onclose = () => {
+        appendMessage('Disconnected from the chat server.', 'system');
+    };
+
+    // form.addEventListener('submit', (e) => {
+    //     e.preventDefault();
+    //     const message = input.value.trim();
+    //     if (message === '') return;
+    //     ws.send(message);
+    //     input.value = '';
+    // });
+
+    form.addEventListener('submit', (e) => {
+        e.preventDefault();
+        const message = input.value.trim();
+        if (message === '') return;
+        const chatMessage = {
+            message_type: 'User',
+            content: message,
+            sender_username: my_username,
+        };
+        ws.send(JSON.stringify(chatMessage));
+        input.value = '';
+    });
+
+
+
+    function appendMessage(message, type) {
+        const msgDiv = document.createElement('div');
+        msgDiv.classList.add('message');
+
+        const contentDiv = document.createElement('div');
+        contentDiv.classList.add('message-content');
+
+        contentDiv.textContent = message;
+
+        if (type === 'self') {
+            msgDiv.classList.add('self');
+            contentDiv.classList.add('self-bubble');
+        } else if (type === 'peer') {
+            msgDiv.classList.add('peer');
+            contentDiv.classList.add('peer-bubble');
+        } else {
+            msgDiv.classList.add('system');
+            contentDiv.classList.add('system-message');
+        }
+
+        msgDiv.appendChild(contentDiv);
+        chat.appendChild(msgDiv);
+        chat.scrollTop = chat.scrollHeight;
+    }
+
+    function appendFileMessage(sender, filename, fileId, type) {
+        const msgDiv = document.createElement('div');
+        msgDiv.classList.add('message');
+
+        const contentDiv = document.createElement('div');
+        contentDiv.classList.add('message-content');
+
+        const fileLink = document.createElement('a');
+        fileLink.href = `/download/${fileId}`;
+        fileLink.textContent = filename;
+        fileLink.download = filename;
+
+        if (type === 'self') {
+            msgDiv.classList.add('self');
+            contentDiv.classList.add('self-bubble');
+            contentDiv.appendChild(document.createTextNode('You sent a file: '));
+        } else if (type === 'peer') {
+            msgDiv.classList.add('peer');
+            contentDiv.classList.add('peer-bubble');
+            contentDiv.appendChild(document.createTextNode(`${sender} sent a file: `));
+        }
+
+        contentDiv.appendChild(fileLink);
+        msgDiv.appendChild(contentDiv);
+        chat.appendChild(msgDiv);
+        chat.scrollTop = chat.scrollHeight;
+    }
+
+</script>
+</body>
+</html>
